@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        let cId = null;
+        let ws = new WebSocket("ws://127.0.0.1:9090")
+        ws.onmessage = message => {
+            const response = JSON.parse(message.data);
+            console.log(response.client + " " + response.method)
+            if(response.method === "connect"){
+                cId = response.client
+                console.log("Successfully created new client id " + response.client)
+            }
+        }
+    </script>
+</body>
+</html>
