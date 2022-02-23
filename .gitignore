@@ -112,7 +112,7 @@ dist
 
 # FuseBox cache
 .fusebox/
-
+test.js
 # DynamoDB Local files
 .dynamodb/
 

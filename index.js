@@ -3,6 +3,7 @@
 const { response } = require("express");
 const { json } = require("express/lib/response");
 const http = require("http");
+const { client } = require("websocket");
 
 const app = require("express")();
 app.get("/", (req, res) => {
@@ -17,7 +18,7 @@ const httpServer = http.createServer();
 httpServer.listen(9090, ()=>{console.log("Listening to port 9090")})
 
 const clients = {};
-
+const games = {};
 //under the wsServer start owning the httpServer, so maybe
 //that's how it gets the tcp?
 const wsServer = new websocketServer({
@@ -28,41 +29,76 @@ const wsServer = new websocketServer({
 wsServer.on("request", request =>{
     const connection = request.accept(null, request.origin)
     connection.on("open", () => console.log("opened"))
-    connection.on("close", ()=>console.log("closed"))
+    connection.on("close", () => console.log("closed"))
     connection.on("message", message=>{
         const result = JSON.parse(message.utf8Data)
         //receiving message from user
         console.log(result)
-        if(result.method = "sendege")
+        switch(result.method)
         {
-            const payLoad = {                
-                "method": "respond",
-                "client": result.client
-            } 
-            console.log(result.client);
-            
-            for(var i in clients)
-            {
-                if(i != result.client)
-                {
-                    var con = clients[i].connection;
-                    con.send(JSON.stringify(payLoad));
+            case "connect":
+                console.log("connect");
+            break;
+            case "create":
+                const gameID = createGuid();
+                games[gameID] = {
+                    "id": gameID,
+                    "clients": []
                 }
-            }
+            
+                const payLoad ={
+                    "method": "create"
+                };
+                clients[clientId].connection.send(JSON.stringify(payLoad));
+                const gameLoad = {
+                    "guid": gameID
+                };
+                clients[clientId].connection.send(JSON.stringify(gameLoad));
+                break;
+            case "join":
+                const game = games[result.guid];
+                const client = result.clientId;
+                console.log(game + " " + client);
+                if(game.clients.length >= 2)
+                {
+                    console.log("cant join");
+                }
+                
+                game.clients.push({
+                    "clientId": client,
+                    "prio": game.clients.length
+                });
+                
+                const methodLoad ={
+                    "method":"join"
+                };
+                const gameLoad2 ={
+                   "game": game
+                };
+                game.clients.forEach(c => {
+                    clients[c.clientId].connection.send(JSON.stringify(methodLoad))
+                    clients[c.clientId].connection.send(JSON.stringify(gameLoad2))
+                })
+
+                break;
         }
     })
-
+    
     const clientId = createGuid();
     clients[clientId] = {
         "connection":connection
     };
 
     const payLoad = {
-        "method": "connect",
-        "client": clientId
+        "method": "connect"
     }
-    //sends back the client connect
     connection.send(JSON.stringify(payLoad))
+    const clientLoad = {
+        "guid": clientId
+    }
+    console.log(payLoad);
+    console.log(clientLoad);
+    connection.send(JSON.stringify(clientLoad))
 })
 
 function createGuid(){  
