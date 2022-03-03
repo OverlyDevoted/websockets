@@ -29,11 +29,29 @@ const wsServer = new websocketServer({
 wsServer.on("request", request =>{
     const connection = request.accept(null, request.origin)
     connection.on("open", () => console.log("opened"))
-    connection.on("close", () => console.log("closed"))
+    connection.on("close", (sender, e) => {
+        //becomes a problem when we have a lot of users = not scalable
+        for(var c in clients)
+        {
+            if(clients[c].connection.closeEventEmitted)
+            {
+                console.log("user " + c + " closed connection");
+                //console.log(games[clients[c].game].clients);
+                HandleServerLeaving(c);
+                delete clients[c];
+                return;
+            }
+        }
+
+
+
+    })
     connection.on("message", message=>{
+        
         const result = JSON.parse(message.utf8Data)
         //receiving message from user
         console.log(result)
+         
         switch(result.method)
         {
             case "connect":
@@ -42,7 +60,7 @@ wsServer.on("request", request =>{
             case "create":
                 const gameID = createGuid();
                 games[gameID] = {
-                    "id": gameID,
+                    "guid": gameID,
                     "clients": []
                 }
             
@@ -54,41 +72,78 @@ wsServer.on("request", request =>{
                     "guid": gameID
                 };
                 clients[clientId].connection.send(JSON.stringify(gameLoad));
+                
                 break;
             case "join":
+                
                 const game = games[result.guid];
                 const client = result.clientId;
-                console.log(game + " " + client);
+
+                clients[client].game = result.guid;
+                console.log(game);
+                if(!game)
+                {
+                    const methodLoad = {
+                        "method":"noGame"
+                    }
+                    clients[client].connection.send(JSON.stringify(methodLoad));
+                    console.log("User " + client + " tried to connect to non existant game. Aborting");
+                    const payLoad = {
+                        "e":""
+                    }
+                    clients[client].connection.send(JSON.stringify(payLoad));
+                    return;
+                }
                 if(game.clients.length >= 2)
                 {
                     console.log("cant join");
                 }
-                
+
                 game.clients.push({
-                    "clientId": client,
+                    "guid": client,
                     "prio": game.clients.length
                 });
-                
+                games[result.guid] = game;
+
+                //response
                 const methodLoad ={
                     "method":"join"
                 };
                 const gameLoad2 ={
-                   "game": game
+                   "guid": game.guid,
+                   "clients":game.clients
                 };
                 game.clients.forEach(c => {
-                    clients[c.clientId].connection.send(JSON.stringify(methodLoad))
-                    clients[c.clientId].connection.send(JSON.stringify(gameLoad2))
+                    clients[c.guid].connection.send(JSON.stringify(methodLoad))
+                    clients[c.guid].connection.send(JSON.stringify(gameLoad2))
                 })
 
+                break;
+            case "leaveGame":
+                const clientID = result.clientId;
+                HandleServerLeaving(clientID);
+                clients[clientID].game = "";
+                const methodResponse ={
+                    "method":"noGame"
+                }
+                clients[clientID].connection.send(JSON.stringify(methodResponse));
+                const responseLoad ={
+                    "e":""
+                }
+                clients[clientID].connection.send(JSON.stringify(responseLoad));
+                break;
+            case "pong":
+                console.log("ponged");
                 break;
         }
     })
     
     const clientId = createGuid();
     clients[clientId] = {
-        "connection":connection
+        "connection":connection,
+        "game":null
     };
-
+   
     const payLoad = {
         "method": "connect"
     }
@@ -107,3 +162,47 @@ function createGuid(){
     }  
     return (S4() + S4() + "-" + S4() + "-4" + S4().substr(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toLowerCase();  
  }  
+ function ConvertStringToHex(str) {
+    var arr = [];
+    for (var i = 0; i < str.length; i++) {
+           arr[i] = ("00" + str.charCodeAt(i).toString(16)).slice(-4);
+    }
+    return "\\u" + arr.join("\\u");
+}
+function HandleServerLeaving(c)
+{
+    const gameID = clients[c].game;
+    const game = games[gameID];
+    if(game)
+    {
+        if(game.clients.length === 1)
+        {
+            delete games[gameID];
+            console.log("deleted game " + gameID);
+        }
+        else
+        {
+            let stayed;
+            //to do update other user
+            game.clients.forEach(client =>{
+                if(client.guid != c){
+                    game.clients = [];
+                    game.clients.push({
+                        "guid": client.guid,
+                        "prio": game.clients.length
+                    });
+                    games[gameID] = game;
+                    
+                    const methodLoad = {
+                        "method":"update"
+                    }
+                    clients[client.guid].connection.send(JSON.stringify(methodLoad));
+                    const payLoad = {
+                        "guid":c
+                    }
+                    clients[client.guid].connection.send(JSON.stringify(payLoad));
+                }
+            }) 
+        }
+    }
+}
