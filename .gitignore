@@ -115,7 +115,7 @@ dist
 test.js
 # DynamoDB Local files
 .dynamodb/
-
+how-to-git.txt
 # TernJS port file
 .tern-port
 

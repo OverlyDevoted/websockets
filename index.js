@@ -54,10 +54,11 @@ wsServer.on("request", request =>{
          
         switch(result.method)
         {
-            case "connect":
+            case "connect": {
                 console.log("connect");
             break;
-            case "create":
+            }
+            case "create": {
                 const gameID = createGuid();
                 games[gameID] = {
                     "guid": gameID,
@@ -74,8 +75,8 @@ wsServer.on("request", request =>{
                 clients[clientId].connection.send(JSON.stringify(gameLoad));
                 
                 break;
-            case "join":
-                
+            }
+            case "join": {
                 const game = games[result.guid];
                 const client = result.clientId;
 
@@ -87,21 +88,31 @@ wsServer.on("request", request =>{
                         "method":"noGame"
                     }
                     clients[client].connection.send(JSON.stringify(methodLoad));
-                    console.log("User " + client + " tried to connect to non existant game. Aborting");
                     const payLoad = {
-                        "e":""
+                        "reason":"No such game"
                     }
                     clients[client].connection.send(JSON.stringify(payLoad));
+                    console.log("User " + client + " tried to connect to non existant game. Aborting");
                     return;
                 }
                 if(game.clients.length >= 2)
                 {
-                    console.log("cant join");
+                    const methodLoad = {
+                        "method":"noGame"
+                    }
+                    clients[client].connection.send(JSON.stringify(methodLoad));
+                    const payLoad = {
+                        "reason":"The lobby is full"
+                    }
+                    clients[client].connection.send(JSON.stringify(payLoad));
+                    console.log(client + " because the lobby is full");
+                    return;
                 }
 
                 game.clients.push({
                     "guid": client,
-                    "prio": game.clients.length
+                    "prio": game.clients.length,
+                    "ready": "no"
                 });
                 games[result.guid] = game;
 
@@ -117,9 +128,38 @@ wsServer.on("request", request =>{
                     clients[c.guid].connection.send(JSON.stringify(methodLoad))
                     clients[c.guid].connection.send(JSON.stringify(gameLoad2))
                 })
-
                 break;
-            case "leaveGame":
+            }
+            case "ready": {
+                let clientID = result.clientId;
+                let gameID = clients[clientID].game;
+                let game = games[gameID];
+                let isReady = false;
+                let otherUser;
+                game.clients.forEach(client =>{
+                    if(client.guid === clientID)
+                    {
+                        client["ready"] = "yes";
+                    }
+                    else
+                    {
+                        if(client.ready === "yes")
+                        {
+                            isReady=true;
+                            otherUser = client.guid;
+                        }
+                    }
+                });
+                if(isReady)
+                {
+                    let methodLoad = {"method":"startgame"};
+                    let payLoad = {"response":"Both players ready"};
+                    SendMessage(clients[otherUser].connection, methodLoad, payLoad);
+                    SendMessage(clients[clientID].connection, methodLoad, payLoad);
+                }
+                break;
+            }
+            case "leaveGame": {
                 const clientID = result.clientId;
                 HandleServerLeaving(clientID);
                 clients[clientID].game = "";
@@ -128,13 +168,15 @@ wsServer.on("request", request =>{
                 }
                 clients[clientID].connection.send(JSON.stringify(methodResponse));
                 const responseLoad ={
-                    "e":""
+                    "reason":"Left lobby"
                 }
                 clients[clientID].connection.send(JSON.stringify(responseLoad));
                 break;
-            case "pong":
+            }
+            case "pong": {
                 console.log("ponged");
                 break;
+            }
         }
     })
     
@@ -169,6 +211,11 @@ function createGuid(){
     }
     return "\\u" + arr.join("\\u");
 }
+function SendMessage(connection, methodLoad, payLoad)
+{
+    connection.send(JSON.stringify(methodLoad));
+    connection.send(JSON.stringify(payLoad));
+}
 function HandleServerLeaving(c)
 {
     const gameID = clients[c].game;
@@ -189,7 +236,8 @@ function HandleServerLeaving(c)
                     game.clients = [];
                     game.clients.push({
                         "guid": client.guid,
-                        "prio": game.clients.length
+                        "prio": game.clients.length,
+                        "ready": client.ready
                     });
                     games[gameID] = game;
                     
