@@ -173,6 +173,24 @@ wsServer.on("request", request =>{
                 clients[clientID].connection.send(JSON.stringify(responseLoad));
                 break;
             }
+            case "play":  {
+                const clientID = result.clientId;
+                let game = games[clients[clientID].game];
+                let x = result.x;
+                game.clients.forEach(c => {
+                    if(c.guid != clientID)
+                    {
+                        const methodLoad ={
+                            "method":"move"
+                        }
+                        const payLoad = {
+                            "x":x
+                        }
+                        SendMessage(clients[c.guid].connection, methodLoad, payLoad);
+                    }
+                })
+                break;
+            }
             case "pong": {
                 console.log("ponged");
                 break;
